@@ -9,7 +9,7 @@ output:
 
 - Package:
 ```{r}
-pacman::p_load(knitr, tidyverse, survival, ggsurvfit, gtsummary, tidycmprsk, condsurv, ezfun, lubridate, sm, sjosmooth)
+pacman::p_load(knitr, tidyverse, survival, ggsurvfit, gtsummary, tidycmprsk, condsurv, ezfun, lubridate, sm, sjosmooth, survminer, GGally)
 ```
 
 # Exercice 1
@@ -44,6 +44,7 @@ pair **id** number
 - Dataset à loader
 
 ```{r}
+library(bpcp)
 data(leuk2)
 leukT <- leuk2
 str(leukT)
@@ -156,7 +157,7 @@ summary(km.fit.leuk2)
 nAR <-sapply(seq(0,35,5) , function(x) sum(leukT$time>=x))
 par(mar=c(8
           , 4, 4, 2) + 0.1)
-plot(km.fit, mark.time=T, ylab="S(t)")
+plot(km.fit.leuk2, mark.time=T, ylab="S(t)")
 mtext(at=0, side=1, line=2, text="N at risk")
 mtext(at=seq(0,35,5) , side=1, text=nAR, line=3)
 ```
