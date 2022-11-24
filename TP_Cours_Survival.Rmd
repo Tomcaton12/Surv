@@ -231,6 +231,9 @@ plot(km.fit.ovarian, ylab=expression(hat(S)*"t"), xlab="temps")
 ## 2) 2/ Estimez survie de façon paramétrique avec un modèle exponentiel **DEMANDER**
 
 ```{r}
+
+km.fit.ovarian.plot <- survfit(Surv(futime, fustat)~ 1, ovarian)
+
 fit.exp.ovarian <- survreg(Surv(futime, fustat) ~ 1, ovarian, dist = "exponential")
 summary(fit.exp.ovarian)
 
@@ -241,7 +244,7 @@ lhat<-exp(-s2$coefficients)
 licinf<-as.numeric( exp(-(s2$coefficients -1.959*selhat)))
 licsup<-as.numeric(exp(-(s2$coefficients + 1.959*selhat)))
 
-plot(km.fit.ovarian, ylab=expression(hat(S)*"t"), xlab="temps")
+plot(km.fit.ovarian.plot, ylab=expression(hat(S)*"t"), xlab="temps")
 x <-seq(0,1200,1)
 lines(x , y=exp(-lhat*x), col="red" , lwd=2)
 lines(x , y=exp(-licsup*x), col="red",lty=2)
@@ -252,27 +255,34 @@ lines(x , y=exp(-licinf*x), col="red",lty=2)
 ```
 
 
-```{r}
-
-```
-
-
-
 ## 3) Estimez la survie de façon paramétrique avec un modèle de Weibull
 
 ```{r}
 fit.weibull.ovarian <- survreg(formula = Surv(futime, fustat) ~ 1, data = ovarian, dist= "weibull")
 summary(fit.weibull.ovarian)
 
-y <-rweibull(1000, shape=2, scale=5)
-s3 <- survreg(Surv(y)~1, dist="weibull")
-plot(km.fit.ovarian, ylab=expression(hat(S)*"t"), xlab="temps")
-lines(y=seq(0.01,0.99,0.01),x=predict(s3,newdata=data.frame(x=1),type='quantile', p=1-seq(0.01,0.99,0.01)), type="l",col=4,lwd=2)
+s3 <- survreg(Surv(futime, fustat)~1, data = ovarian, dist = "weibull")
+summary(s3)
 
+y <-rweibull(1000, shape=2, scale=5)
+plot(km.fit.ovarian.plot, ylab=expression(hat(S)*"t"), xlab="temps")
+lines(y=seq(0.01,0.99,0.01),x=predict(s3,newdata=data.frame(x=1),type='quantile', p=1-seq(0.01,0.99,0.01)), type="l",col=4,lwd=2)
 
 ```
 
 ## 4) Quel modèle choisir ? AIC ! **ERREUR dans l'AIC s3**
+
+```{r}
+plot(km.fit.ovarian.plot, ylab=expression(hat(S)*"t"), xlab="temps")
+x <- seq(0,1200,1)
+lines(x , y=exp(-lhat*x), col="red" , lwd=2)
+lines (y=seq(0.01,0.99,0.01),
+       x=predict(s3,newdata=data.frame(x=1),
+                 type='quantile', p=1- 
+                   seq(0.01,0.99,0.01)),
+       type="l",col=4,lwd=2)
+```
+
 
 ```{r}
 AIC(s2)
