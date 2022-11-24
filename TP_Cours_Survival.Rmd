@@ -1,0 +1,553 @@
+---
+title: "TP Cours"
+author: "Will"
+date: "2022-11-23"
+output: 
+  html_document: 
+    toc: yes
+---
+
+- Package:
+```{r}
+pacman::p_load(knitr, tidyverse, survival, ggsurvfit, gtsummary, tidycmprsk, condsurv, ezfun, lubridate, sm, sjosmooth)
+```
+
+# Exercice 1
+
+Chargez la base de données
+
+leuk2 du package bpcp
+
+In this study there were *21 pairs of subjects*, and *within* each pair *one subject received 6-mercaptopurine (6-MP) and one got placebo*. The data are **right censored**.
+
+**Format**
+A data frame with 42 observations on the following variables.
+
+**time**
+time in remission (in **weeks**)
+
+**status**
+event status, **1 is relapse = event**, **0 is censored**
+
+**treatment**
+treatment group: either 'placebo' or '6-MP'
+
+**pair**
+pair **id** number
+
+1/ Dans le groupe des patients ayant reçu le traitement (6-MP), estimez la survie de façon non paramétrique en utilisant la formule de Kaplan Meier et représentez là
+
+2/ estimez également son intervalle de confiance à 95%
+
+3/ refaite ces estimations avec le package survival
+
+- Dataset à loader
+
+```{r}
+data(leuk2)
+leukT <- leuk2
+str(leukT)
+labelled::look_for(leuk2)
+
+```
+
+ime est numérique
+tatus est numérique MAIS **BINAIRE**
+Traitement est en **facteur**
+pair est en integer
+
+## 1) Formule de Kaplan-Meier
+
+**AUCUNE TRANSFORMATION DES DONEES POUR FONCTIONNER avec survival**
+
+D'abord, on isole les patients du groupe qui a reçu le traitement : 6-MP.
+Avec la fonction `subset`on peut extraire des sous-populations, prends 3 arguments: data = leuk2, une condition = treatment ==, et éventuellement une condition sur les colonnes a selectionner "6-MP".
+**Attention** cette fonction supprime direct les valeurs NA.
+
+```{r}
+leukT <-subset(leuk2, treatment=="6-MP")
+leukT
+```
+
+On travail sur des rangs, donc on réorganise dans l'ordre les temps d'arrivés d'event dans la colonne "time" avec la fonction `order`.
+
+```{r}
+leukT <-leukT[order(leukT$time),]
+leukT
+```
+On isole les temps d'évent pour avoir une unique date de temps d'event par events quand le status d'event == 1. On regarde la colonne time, et on regarde s'il y a eu un event. Pex: au temps 6 il y a 3 status 1, donc on garde 6. Mais au temps 9, il y a 0 event, on le garde pas.
+
+```{r}
+tab_KM <-data.frame(tps=unique(leukT$time[leukT$status==1]))
+tab_KM
+```
+
+La fonction `sapply` applique une fonction aux éléments d’un vecteur ou d’une liste et peut retourner un vecteur, une liste ou une matrice. 
+Avec cette fonction on calcul le nombre d'évent.
+
+Tab_KM$di nous permet de créer la colonne di dans le tableau et d'y coller le résultats qu'on calcul a cette étape.
+La fonction sapply va appliquer la fonction sur x d'addition, des temps respectant la condition qu'il faut additionner les temps dont les valeurs de status sont 1.
+
+```{r}
+tab_KM$di <-sapply(tab_KM$tps, function(x) sum(leukT$time==x & leukT$status==1)) # nb d'evenements
+tab_KM
+```
+
+Applique la fonction de somme sur l'ensemble des temps >= a x et x est le nombre de temps, représentant le nombre de patients à risques encore en vit au temps x, tout ça en lien avec la colonne Temps de Tab_KM.
+Pex: le ni de 6 = 21 pcq il y a depuis le premier 6, encore 21 temps plus grand en le comptant lui même. Pour le temps 7, en le comptant il y a 17 temps en dessous de lui.
+Ce sont les patients à risques restant.
+
+```{r}
+tab_KM$ni <-sapply(tab_KM$tps, function(x) sum(leukT$time>= x)) # nb patients à risque
+tab_KM
+
+```
+
+Calcul du **survie conditionnelle**  entre ti et  ti+1
+La survie conditionnelle est la soustraction:
+(nombre de patients à risques a un instant t calculé avec ni, - le nombre d'évent a ces temps di (décès))
+L'ensemble divisé par le nombre de patient à risque.
+```{r}
+tab_KM$Si <-(tab_KM$ni-tab_KM$di)/tab_KM$ni# survie conditionnelle entre ti et ti+1
+tab_KM
+```
+
+Calcul de la **fonction de Survie S(t) qui est le produit des Survies Conditionnelles**
+```{r}
+tab_KM$S <-cumprod(tab_KM$Si)
+tab_KM
+```
+
+Plot de la courbe de KM...
+Le 0 dans le c(0 ...) est l'initiation de l'échelle des x, ensuite on prend les Tab_KM$Temps pour mettre les temps voulu par les events. sur une échelle max de celle de la base originale.
+
+
+```{r}
+plot <- plot(x=c(0,tab_KM$tps,max(leukT$time)),y=c(1,tab_KM$S,tab_KM$S[length(tab_KM$S)]),ylim=c(0,1),type="s",ylab="Survie sans rechute", xlab ="Temps")
+
+```
+
+## 2) Estimez également son intervalle de confiance à 95%
+
+Ici pour modifier il faut refaire l'étape de di et ni au dessus pour l'adapter a un nouvel exo.
+La ligne segment ajoute les IC a 95% sur le plot.
+
+```{r}
+plot(x=c(0,tab_KM$tps,max(leukT$time)),y=c(1,tab_KM$S,tab_KM$S[length(tab_KM$S)]),ylim=c(0,1),type="s",ylab="Survie sans rechute", xlab ="Temps")
+
+tab_KM$varS1 <-tab_KM$di/(tab_KM$ni*(tab_KM$ni-tab_KM$di))
+tab_KM$sumvarS1 <-cumsum(tab_KM$varS1)
+tab_KM$SD_S <-sqrt(tab_KM$S^2 * tab_KM$sumvarS1)
+
+segments(x0 =tab_KM$tps, y0 = tab_KM$S-1.959 * tab_KM$SD_S, y1 = tab_KM$S + 1.959 * tab_KM$SD_S, lty=2, col=2)
+
+```
+
+## 3) Refaite ces estimations avec le package survival
+
+Ici on trouve les IC à 85%
+
+```{r}
+km.fit.leuk2 <- survfit(Surv(time, status) ~ 1, data = leukT)
+summary(km.fit.leuk2)
+```
+
+```{r}
+nAR <-sapply(seq(0,35,5) , function(x) sum(leukT$time>=x))
+par(mar=c(8
+          , 4, 4, 2) + 0.1)
+plot(km.fit, mark.time=T, ylab="S(t)")
+mtext(at=0, side=1, line=2, text="N at risk")
+mtext(at=seq(0,35,5) , side=1, text=nAR, line=3)
+```
+
+```{r}
+# "event" plots cumulative events (f(y) = 1-y
+ggsurvplot(km.fit.leuk2, fun = "event", risk.table = TRUE, surv.scale = "percent") 
+
+# "cumhaz" plots the cumulative hazard function (f(y) = -log(y))
+ggsurvplot(km.fit.leuk2, fun = "cumhaz", risk.table = TRUE)
+
+# "pct" for survival probability in percentage
+ggsurvplot(km.fit.leuk2, fun = "pct", risk.table = TRUE)
+
+```
+
+
+# Exercice 2
+
+Chargez la base de données
+
+package survival(data(cancer))
+
+```{r}
+data(cancer)
+str(ovarian)
+labelled::look_for(ovarian)
+
+```
+Survival in a randomised trial comparing two treatments for ovarian cancer
+
+futime:	survival or censoring time - num discret
+fustat:	censoring status - num binaire
+age:	in years - num continue
+resid.ds:	residual disease present (1=no,2=yes) - num binaire
+rx:	treatment group - num binaire
+ecog.ps:	ECOG performance status (1 is better, échelle en oncologie) - num
+
+1/ Estimez et représentez la survie avec l’estimateur de Kaplan Meier
+
+2/ Estimez et représentez la survie de façon paramétrique avec un modèle exponentiel
+
+3/ Estimez et représentez la survie de façon paramétrique avec un modèle de Weibull
+
+4/ Quel modèle paramétrique choisir ?
+
+
+## 1) Estimer survie avec Kaplan-Meier
+
+```{r}
+km.fit.ovarian <- survfit(Surv(I(futime/30.5), fustat)~ 1, ovarian)
+summary(km.fit.ovarian)
+
+# "event" plots cumulative events (f(y) = 1-y
+ggsurvplot(km.fit.ovarian, fun = "event", risk.table = TRUE, surv.scale = "percent") 
+
+# "cumhaz" plots the cumulative hazard function (f(y) = -log(y))
+ggsurvplot(km.fit.ovarian, fun = "cumhaz", risk.table = TRUE)
+
+# "pct" for survival probability in percentage
+ggsurvplot(km.fit.ovarian, fun = "pct", risk.table = TRUE)
+
+plot(km.fit.ovarian, ylab=expression(hat(S)*"t"), xlab="temps")
+# lhat <- sum(ovarian$fustat) / sum(ovarian$futime)
+# x <- seq(0,1200,1)
+# lines(x , y=exp(-lhat*x), col="red" , lwd=2)
+
+```
+
+
+## 2) 2/ Estimez survie de façon paramétrique avec un modèle exponentiel **DEMANDER**
+
+```{r}
+fit.exp.ovarian <- survreg(Surv(futime, fustat) ~ 1, ovarian, dist = "exponential")
+summary(fit.exp.ovarian)
+
+s2<-survreg(Surv(futime,fustat)~1 , data=ovarian, dist="exponential")
+summary(s2)
+selhat<-sqrt(summary(s2)$var)
+lhat<-exp(-s2$coefficients)
+licinf<-as.numeric( exp(-(s2$coefficients -1.959*selhat)))
+licsup<-as.numeric(exp(-(s2$coefficients + 1.959*selhat)))
+
+plot(km.fit.ovarian, ylab=expression(hat(S)*"t"), xlab="temps")
+x <-seq(0,1200,1)
+lines(x , y=exp(-lhat*x), col="red" , lwd=2)
+lines(x , y=exp(-licsup*x), col="red",lty=2)
+lines(x , y=exp(-licinf*x), col="red",lty=2)
+
+# lines(y=seq(0.01,0.99,0.01),x=predict(s3,newdata=data.frame(x=1),type='quantile', p=1-seq(0.01,0.99,0.01)), type="l",col=4,lwd=2)
+
+```
+
+
+```{r}
+
+```
+
+
+
+## 3) Estimez la survie de façon paramétrique avec un modèle de Weibull
+
+```{r}
+fit.weibull.ovarian <- survreg(formula = Surv(futime, fustat) ~ 1, data = ovarian, dist= "weibull")
+summary(fit.weibull.ovarian)
+
+y <-rweibull(1000, shape=2, scale=5)
+s3 <- survreg(Surv(y)~1, dist="weibull")
+plot(km.fit.ovarian, ylab=expression(hat(S)*"t"), xlab="temps")
+lines(y=seq(0.01,0.99,0.01),x=predict(s3,newdata=data.frame(x=1),type='quantile', p=1-seq(0.01,0.99,0.01)), type="l",col=4,lwd=2)
+
+
+```
+
+## 4) Quel modèle choisir ? AIC ! **ERREUR dans l'AIC s3**
+
+```{r}
+AIC(s2)
+AIC(s3)
+```
+
+
+# Exercice 3
+
+Chargez la base de données
+
+leuk2du package bpcp
+
+- Dataset à loader
+
+```{r}
+data(leuk2)
+leukT <- leuk2
+str(leukT)
+labelled::look_for(leuk2)
+
+```
+
+## 1) Comparez l’effet du traitement avec le placebo à l’aide du test du log-rank
+
+```{r}
+log.rank.leuk2 <- survdiff(Surv(time, status) ~ treatment, data = leukT)
+log.rank.leuk2
+```
+
+```{r}
+fit.treatment <- survfit(Surv(time, status) ~ treatment, data = leukT)
+fit.treatment
+
+# "event" plots cumulative events (f(y) = 1-y
+ggsurvplot(fit.treatment, fun = "event", risk.table = TRUE, surv.scale = "percent") 
+
+# "cumhaz" plots the cumulative hazard function (f(y) = -log(y))
+ggsurvplot(fit.treatment, fun = "cumhaz", risk.table = TRUE)
+
+# "pct" for survival probability in percentage
+ggsurvplot(fit.treatment, fun = "pct", risk.table = TRUE)
+```
+
+
+# Exercice 4
+
+Chargez la base pbc du package survival
+
+```{r}
+data(pbc)
+pbc <- pbc
+str(pbc)
+labelled::look_for(pbc)
+```
+## Q1) 
+
+###On va modéliser le délai jusqu’au décès ou à la transplantation (critère composite)
+
+###Représentez la fonction de survie selon le bras de traitement avec l’estimateur de Kaplan Meier et testez l’effet du traitement par un test du log-rank
+
+
+```{r}
+pbc.deces.trans.fit <- survfit(Surv(time/365.25, status!=0)~trt, data=pbc) # KM
+pbc.deces.trans.fit
+
+# "event" plots cumulative events (f(y) = 1-y
+ggsurvplot(pbc.deces.trans.fit, fun = "event", risk.table = TRUE, surv.scale = "percent", conf.int = TRUE) 
+
+# "cumhaz" plots the cumulative hazard function (f(y) = -log(y))
+ggsurvplot(pbc.deces.trans.fit, fun = "cumhaz", risk.table = TRUE, conf.int = TRUE)
+
+# "pct" for survival probability in percentage
+ggsurvplot(pbc.deces.trans.fit, fun = "pct", risk.table = TRUE, conf.int = TRUE, pval = TRUE)
+
+plot(survfit(Surv(time/365.25, status!=0)~trt, data=pbc), col=c(1,4))
+
+survdiff(Surv(time/365.25, status!=0)~trt, data=pbc) # Log-Rank
+
+```
+
+## Q2) Cox
+
+###Modélisez l’effet traitement par un modèle de Cox
+
+```{r}
+cox.pbc.trt <- coxph(Surv(time/365.25, status!=0)~trt, data=pbc) # Cox
+summary(cox.pbc.trt)
+
+tbl_regression(cox.pbc.trt, exponentiate = TRUE) |> 
+  add_global_p(keep = TRUE) |> # Keep pour garder les valeurs individuel
+  add_significance_stars(hide_p = FALSE)
+
+ggcoef_model(cox.pbc.trt, exponentiate = TRUE)
+
+```
+
+## Q3) 
+
+### Modélisez l’effet de l’âge
+
+### Quel est l’effet d’une augmentation de 5 ans d’âge ?
+
+```{r}
+
+cox.pbc.age <- coxph(formula = Surv(time, status!= 0) ~ age, data = pbc)
+
+summary(cox.pbc.age)
+
+tbl_regression(cox.pbc.age, exponentiate = TRUE) |> 
+  add_global_p(keep = TRUE) |> # Keep pour garder les valeurs individuel
+  add_significance_stars(hide_p = FALSE)
+
+ggcoef_model(cox.pbc.age, exponentiate = TRUE)
+
+
+```
+
+```{r}
+cox.pbc.5ans <- coxph(Surv(time/365.25, status!=0)~I(age/5), data=pbc)
+
+summary(cox.pbc.5ans)
+
+tbl_regression(cox.pbc.5ans, exponentiate = TRUE) |> 
+  add_global_p(keep = TRUE) |> # Keep pour garder les valeurs individuel
+  add_significance_stars(hide_p = FALSE)
+
+ggcoef_model(cox.pbc.5ans, exponentiate = TRUE)
+
+```
+
+## Q4)
+
+### Vérifiez l’hypothèse de log-linearitede l’âge
+
+#### Solution 1
+
+```{r}
+coxph(Surv(time/365.25, status!=0)~I(age/5 ), data=pbc)
+agefit<-coxph(Surv(time,status!=0)~ pspline(age), data=pbc)
+agefit
+
+termplot(agefit, term=1, se=TRUE, col.term=1, col.se=1)
+
+```
+
+#### Solution 2
+
+```{r}
+agefit2 <-coxph(Surv(time/365.25, status!=0)~ 1, data=pbc)
+plot(pbc$age, y=resid(agefit2) , ylab="Residus" , xlab="age")
+lines(lowess(pbc$age, resid(agefit2)))
+
+
+
+```
+
+
+
+## Q5)
+
+### Estimez l’effet de la variable stage
+
+### Vérifiez l’hypothèse de proportionnalité des risques
+
+
+```{r}
+fit.stage.pbc <-coxph(Surv(time/365.25, status!=0)~factor(stage), data=pbc)
+summary(fit.stage.pbc)
+plot(survfit(Surv(time/365.25, status!=0)~factor(stage) , data=pbc),fun="cloglog" , col=c(1,4))
+
+tbl_regression(fit.stage.pbc, exponentiate = TRUE) |> 
+  add_global_p(keep = TRUE) |> # Keep pour garder les valeurs individuel
+  add_significance_stars(hide_p = FALSE)
+
+ggcoef_model(fit.stage.pbc, exponentiate = TRUE)
+
+cox.zph.plot <- cox.zph(fit.stage.pbc)
+cox.zph.plot
+plot(cox.zph.plot)
+```
+
+# Exercice 5 - Compétition
+
+
+base pbc du package survival
+
+```{r}
+data(pbc, package = "survival")
+
+```
+
+3 événements en compétition : transplantation (1) et décès du patient (2)
+
+status: status at endpoint, 0/1/2 for censored, transplant, dead
+
+time: number of days between registration and the earlier of death, transplantion, or study analysis in July, 1986
+
+Fonction de d’estimation et de test (test de Gray) des incidences cumulées : fonction cuminc du package cmprsk
+
+## 1) On compare les incidences cumulées de décès sans transplantation et de transplantation selon le sexe
+
+```{r}
+table(Sexe = pbc$sex , Status = pbc$status)
+
+```
+
+## Fine & Gray
+
+```{r}
+pbc <- 
+  pbc %>% 
+  mutate(
+    status = as.factor(recode(status, "0" = 0, "1" = 2, "2" = 1))
+  )
+```
+
+```{r}
+head(pbc) |> 
+  dplyr::select("time", "status", "sex", "stage", "trt")
+```
+
+```{r}
+aa <- cuminc(Surv(time, status) ~ sex, data = pbc)
+tbl_cuminc(aa)
+aa
+```
+
+```{r}
+cuminc(Surv(I(time/30.5), status) ~ sex, data = pbc) %>% 
+  ggcuminc(outcome = c("1", "2")) + 
+  labs(
+    x = "Mois"
+  ) + 
+  add_confidence_interval() +
+  add_risktable()
+```
+
+```{r}
+cuminc(Surv(time, status) ~ ascites , data = pbc) %>% 
+  tbl_cuminc(
+    times = 1826.25, 
+    label_header = "**{time/365.25}-year cuminc**") %>% 
+  add_p()
+```
+
+
+
+
+# Méthode Cox CICR
+
+
+Transplantation
+```{r}
+coxph(Surv(time, status ==2) ~ sex,data = pbc)
+```
+
+Décès
+```{r}
+coxph(Surv(time, status ==1) ~ sex,data = pbc)
+
+```
+Modélisation Décès
+```{r}
+fg <- crr(Surv(time, status) ~ sex, failcode = 1, cov1 = (sex =="f"), data = pbc)
+tbl_regression(x = fg, exp = TRUE)
+fg
+```
+
+Modélisation transplanttion
+
+```{r}
+fg2 <- crr(Surv(time, status) ~ sex, failcode = 2, cov1 = (sex =="f"), data = pbc)
+tbl_regression(x = fg2, exp = TRUE)
+fg2
+```
+
+
+
