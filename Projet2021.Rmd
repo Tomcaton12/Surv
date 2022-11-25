@@ -7,7 +7,7 @@ output: html_document
 
 - Package:
 ```{r}
-pacman::p_load(knitr, tidyverse, survival, ggsurvfit, gtsummary, tidycmprsk, condsurv, ezfun, lubridate, sm, sjosmooth, survminer, GGally, readr, labelled, tidyverse, survey)
+pacman::p_load(readr,knitr, tidyverse, survival, ggsurvfit, gtsummary, tidycmprsk, condsurv, ezfun, lubridate, sm, sjosmooth, survminer, GGally, readr, labelled, tidyverse, survey)
 ```
 
 # Exercice 1
@@ -274,16 +274,16 @@ kaposi <- kaposi %>%
 ```{r}
 
 
-km.fit.ovarian.plot <- survfit(Surv(I(time/30.25), status) ~ 1, data = kaposi)
+km.fit.ovarian.plot <- survfit(Surv(time, status) ~ 1, data = kaposi)
 
 # "event" plots cumulative events (f(y) = 1-y
-ggsurvplot(km.fita, fun = "event", risk.table = TRUE, surv.scale = "percent", pval = TRUE, conf.int = TRUE) 
+ggsurvplot(km.fit.ovarian.plot, fun = "event", risk.table = TRUE, surv.scale = "percent", pval = TRUE, conf.int = TRUE) 
 
 # "cumhaz" plots the cumulative hazard function (f(y) = -log(y))
-ggsurvplot(km.fita, fun = "cumhaz", risk.table = TRUE, pval = TRUE)
+ggsurvplot(km.fit.ovarian.plot, fun = "cumhaz", risk.table = TRUE, pval = TRUE)
 
 # "pct" for survival probability in percentage
-ggsurvplot(km.fita, fun = "pct", risk.table = TRUE, pval = TRUE, conf.int = TRUE)
+ggsurvplot(km.fit.ovarian.plot, fun = "pct", risk.table = TRUE, pval = TRUE, conf.int = TRUE)
 
 
 ```
@@ -377,5 +377,11 @@ lines (y=seq(0.01,0.99,0.01),
                  type='quantile', p=1- 
                    seq(0.01,0.99,0.01)),
        type="l",col=4,lwd=2)
+```
+
+
+
+```{r}
+survival:::survmean(km.fit.ovarian.plot, rmean = 3658)
 ```
 

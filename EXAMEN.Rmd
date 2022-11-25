@@ -2,7 +2,7 @@
 title: "Examen"
 author: "William LEGENDRE"
 date: "2022-11-25"
-output: html_document
+output: word_document
 ---
 
 - Package:
@@ -346,6 +346,49 @@ Les trois modèles semblent suivre la même tendance.
 
 # Exercice 3
 
+## 1) 
+
+```{r}
+str(mgus_smsds)
+head(mgus_smsds)
+look_for((mgus_smsds))
+```
+
+Dichotomiser les âges
+
+```{r}
+mgus_smsds$age_rec <- cut(mgus_smsds$age,
+  include.lowest = TRUE,
+  right = FALSE,
+  dig.lab = 2,
+  breaks = c(-Inf, 64, +Inf)
+)
+
+```
 
 
 
+```{r}
+table(age = mgus_smsds$age_rec , Status = mgus_smsds$ev)
+
+```
+
+Comparer les incidences cumulées
+
+
+```{r}
+mgus_smsds <- mutate_at(mgus_smsds, .vars = vars(ev), .funs = as_factor)
+
+```
+
+```{r}
+a <- cuminc(Surv(time, ev) ~ 1, data = mgus_smsds)
+tbl_cuminc(a)
+```
+
+
+```{r}
+km_ <- survfit(Surv(time, ev) ~ 1, data = mgus_smsds)
+km_
+```
+Pour la Q2 il fallait utiiser le CICR, model de cox
