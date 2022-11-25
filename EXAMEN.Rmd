@@ -1,0 +1,351 @@
+---
+title: "Examen"
+author: "William LEGENDRE"
+date: "2022-11-25"
+output: html_document
+---
+
+- Package:
+```{r}
+pacman::p_load(knitr, tidyverse, survival, ggsurvfit, gtsummary, tidycmprsk, condsurv, ezfun, lubridate, sm, sjosmooth, survminer, GGally, labelled)
+```
+
+# Exercice 1
+
+Charger `lung`
+
+```{r}
+data(cancer)
+str(lung)
+head(lung)
+
+lung <- 
+  lung %>% 
+  mutate(
+    status = recode(status, `1` = 0, `2` = 1)
+  )
+
+```
+
+
+## 1) Fonction de survie - KM
+
+```{r}
+km_globale <- survfit(Surv(time, status) ~ 1, data = lung)
+km_globale
+
+survfit(Surv(time, status) ~ 1, data = lung) %>% 
+  tbl_survfit(
+    prob = .5,
+    label_header = "**Survie médiane (95% CI)**"
+  )
+
+plot_main <-
+  survfit2(Surv(time, status) ~ 1, data = lung) %>% 
+  ggsurvfit() +
+  labs(
+    x = "Jours",
+    y = "Probabilité de survie"
+    ) + 
+  add_confidence_interval() +
+  add_risktable()
+
+plot1 <- 
+  plot_main + 
+  geom_segment(x = 310, xend = 310, y = -0.05, yend = 0.5, 
+               size = 1.5) +
+  geom_segment(x = 310, xend = -40, y = 0.5, yend = 0.5,
+               size = 1.5, 
+               arrow = arrow(length = unit(0.2, "inches"))) 
+
+plot1
+```
+
+Survie médiane est de 310 jours, avec les IC, correspond a une probabilité de survie à 50%.
+Ignorer les censurés conduit a une **sous**-estimation du temps médian de survie.
+
+```{r}
+# "event" plots cumulative events f(y) = 1-y
+ggsurvplot(km_globale, fun = "event", risk.table = TRUE, surv.scale = "percent", conf.int = TRUE) 
+
+# "cumhaz" plots the cumulative hazard function (f(y) = -log(y))
+ggsurvplot(km_globale, fun = "cumhaz", risk.table = TRUE, conf.int = TRUE)
+
+# "pct" for survival probability in percentage
+ggsurvplot(km_globale, fun = "pct", risk.table = TRUE, conf.int = TRUE)
+
+```
+
+Sa représentation est donnée, ci dessus, correspondant a celle `pct` affiché en dernier.
+
+## 2) Modèle multivarié, effet de l'age et du sexe
+
+Le modèle dépend l'**hypothèse des risques proportionnels**. Il suppose que les **rapports de risque entre les groupes restent constants**. En d'autres termes, quelle que soit l'évolution des taux de risque des sujets au cours de la période d'observation, le taux de risque d'un groupe par rapport à l'autre restera toujours le même.
+
+Le modèle de Cox peut quantifier la force des relations entre les covariables et la durée de survie des sujets avec la régression de survie.
+
+La sortie fournit beaucoup d'informations, mais les meilleures informations d'intérêt être obtenues avec la colonne exp(coef) et la colonne p (p-value)
+
+De plus, le rapport de risque pour chaque covariable est équivalent à e à la puissance du coefficient de la covariable (eᶜᵒᵉᶠ), qui est déjà fourni dans la colonne exp(coef).
+
+### Avec interracton age*sex
+
+Il faut ajouter manuellement une interraction sinon elle est ignorée sur la reprsentation du HR.
+```{r}
+lung$age.sex <- lung$age * lung$sex
+
+```
+
+```{r}
+rescox.lung1 <-coxph(formula = Surv(time, status) ~ age + sex + lung$age.sex, data = lung)
+summary(rescox.lung1)
+```
+
+```{r}
+plot(survfit(Surv(time, status) ~ age + sex, data = lung),fun="cloglog" , col=c(1,4))
+
+```
+
+
+```{r}
+tbl_regression(rescox.lung1, exponentiate = TRUE) |> 
+  add_global_p(keep = TRUE) |> # Keep pour garder les valeurs individuel
+  add_significance_stars(hide_p = FALSE)
+
+ggcoef_model(rescox.lung1, exponentiate = TRUE)
+
+cox.zph.plot <- cox.zph(rescox.lung1)
+rescox.lung1
+plot(cox.zph.plot)
+```
+
+### Sans interraction age * sex
+
+
+```{r}
+rescox.lung2 <-coxph(formula = Surv(time, status) ~ age + sex, data = lung)
+summary(rescox.lung2)
+
+tbl_regression(rescox.lung2, exponentiate = TRUE) |> 
+  add_global_p(keep = TRUE) |> # Keep pour garder les valeurs individuel
+  add_significance_stars(hide_p = FALSE)
+
+ggcoef_model(rescox.lung2, exponentiate = TRUE)
+
+cox.zph.plot2 <- cox.zph(rescox.lung2)
+rescox.lung1
+plot(cox.zph.plot2)
+cox.zph.plot2
+
+
+```
+
+### Interprétation
+
+#### Sans interraction
+
+La valeur de p indique quelles covariables ont un effet significatif sur la durée de survie.
+
+Sur la base des résultats sans interraction, la covariable `sex`  est un prédicteur statistiquement significatif pour déterminer la durée de survie, étant donné la petite valeur de p de son coefficient.
+
+Un **HR < 1 indique un risque réduit d'event** tandis qu'un H**R > 1 indique un risque accru **.
+
+Ainsi, le **HR = 0.60** implique que **0.60 fois plus de femmes meurent que d'hommes, à un moment donné**. En d'autres termes, les **femmes ont un risque de décès significativement plus faible que les hommes dans ces données**.
+
+#### Avec interaction
+
+Il ne semble pas y avoir d'effet significatif.
+
+## Hypothèses (Risque proportionnels, log linéarité, censure non informative)
+
+- La censure non informative dépend de la constitution de l'étude, rien indique qu'elle ne la suit pas.
+
+- Log-linéarité
+
+```{r}
+test.fit<-coxph(Surv(time, status)~ pspline(age), data=lung)
+summary(test.fit)
+termplot(test.fit, term=1, se=TRUE, col.term=1, col.se=1)
+
+ggcoxdiagnostics(test.fit)
+```
+Ici le p non linaire est de 0.420 il n'y a donc pas d'indication d'un effet non linaire
+
+
+- Proportionnalité des risques au cours du temps
+
+Le test n'est pas en faveur d'une proportionalitée:
+p(age) = 0.65
+p(sex)= 0.11
+
+
+## 3) Sur-risque ECOG
+
+Aucun ECOG à 4 n'est présent dans la base de donnée. Un NA est bien présent cependant. ECOG a un range de 0 a 3.
+
+```{r}
+
+
+cfit <- coxph(Surv(time, status) ~ age + strata(ph.ecog), data=lung)
+cfit
+
+tbl_regression(cfit)
+```
+
+
+ECOG score 3, femme
+```{r}
+
+lfit <- survreg(Surv(time, status) ~ ph.ecog, data=lung)
+pct <- 1:98/100 # The 100th percentile of predicted survival is at +infinity
+ptime <- predict(lfit, newdata=data.frame(ph.ecog=3, sex = 2), type='quantile',
+p=pct, se=TRUE)
+matplot(cbind(ptime$fit, ptime$fit + 2*ptime$se.fit,
+ptime$fit - 2*ptime$se.fit)/30.5, 1-pct,
+xlab="Months", ylab="Survival", type='l', lty=c(1,2,2), col=1)
+
+```
+
+ECOG score 2, homme
+```{r}
+lfit <- survreg(Surv(time, status) ~ ph.ecog, data=lung)
+pct <- 1:98/100
+ptime <- predict(lfit, newdata=data.frame(ph.ecog=2, sex = 1), type='quantile',
+p=pct, se=TRUE)
+matplot(cbind(ptime$fit, ptime$fit + 2*ptime$se.fit,
+ptime$fit - 2*ptime$se.fit)/30.5, 1-pct,
+xlab="Months", ylab="Survival", type='l', lty=c(1,2,2), col=1)
+
+```
+
+### Interprétation
+
+Nous observons que la prédiction courbe de survie évolue différement entre les scores ECOG et sexe. La courbe de survie décroit fortement plus les femmes dont le score ECOG est de 3, plus abrutement que le score ECOG 2 et le sexe homme.
+
+
+```{r}
+km_sex.ecog <- survfit(Surv(time, status) ~ sex + strata(ph.ecog), data=lung)
+print(km_sex.ecog)
+km_sex.ecog
+
+# "event" plots cumulative events f(y) = 1-y
+ggsurvplot(km_sex.ecog, fun = "event", risk.table = FALSE, surv.scale = "percent", conf.int = FALSE, pval = TRUE) 
+
+# "cumhaz" plots the cumulative hazard function (f(y) = -log(y))
+ggsurvplot(km_sex.ecog, fun = "cumhaz", risk.table = TRUE, conf.int = FALSE, pval = TRUE)
+
+# "pct" for survival probability in percentage
+ggsurvplot(km_sex.ecog, fun = "pct", risk.table = TRUE, conf.int = FALSE, pval = TRUE)
+
+surv_pvalue(km_sex.ecog, method = "survdiff")
+```
+Il semble y avoir une différence significative entre les niveaux Male et ECOG 2, et FEMALE et ECOG 3 a p = 0.001.
+
+## 4) Interprétation de la feuille
+
+Le première modèle présenté n'intègre pas en comparaison le strata(ph.ecog)
+
+Le modèle produira un hazard ratio pour le sexe en présence de deux (ou plus) dangers intrinsèques aux niveaux de de la stratification sur ph.ecog .
+Cela peut être utile en cas de violation de l’hypothèse des risques proportionnels, et peut aider à répondre à l’hypothèse du de proportionalité et fournir des estimations plus valides.
+
+Un modèle stratifié permet donc de répondre a différent HR par strate, plutôt qu'un HR proportionnel pour l'ensemble.
+
+
+
+# Exercice 2
+
+
+```{r}
+str(aml)
+head(aml)
+```
+
+## Comparer deux groupes
+
+```{r}
+log.rank.aml <- survdiff(Surv(time, status) ~ x, data = aml)
+log.rank.aml
+
+survdiff(Surv(time, status) ~ x, data = aml)$pvalue
+
+```
+
+Avec un test log.rank nous testons la différence éventuelle. 
+Ici il ne semble pas y avoir de différence significative.
+La valeur de p étant égale à 0.07 avec un arrondi.
+
+
+```{r}
+km.fit.x <- survfit(Surv(I(time/30.5), status) ~ x, aml)
+summary(km.fit.x)
+km.fit.x
+
+# "pct" for survival probability in percentage
+plot.x <- ggsurvplot(km.fit.x, fun = "pct", risk.table = TRUE, pval = TRUE)
+plot.x
+```
+
+
+
+## Effet de traitement par le modèle de COX
+
+```{r}
+effect.x <- coxph(Surv(time, status) ~ x, data = aml)
+effect.x
+summary(effect.x)
+
+cox.plot <- ggsurvplot(survfit(effect.x), color = "#2E9FDF",
+           ggtheme = theme_minimal(), aml)
+
+
+
+tbl_regression(effect.x, exponentiate = TRUE) |> 
+  add_global_p(keep = TRUE) |> # Keep pour garder les valeurs individuel
+  add_significance_stars(hide_p = FALSE)
+
+ggcoef_model(effect.x, exponentiate = TRUE)
+
+cox.zph.plotx <- cox.zph(effect.x)
+plot(cox.zph.plotx)
+cox.zph.plotx
+```
+
+L'effet n'est pas significatif statistiquement, mais est-il significatif de manière clinique ? Je n'ai pas d'expérience mais la question se pose peut être.
+On voit un sur-risque pour le groupe traité classiquement.
+
+
+## 3) Modèle exponentiel
+
+```{r}
+km.fit.x <- survfit(Surv(time, status)~ x, aml)
+
+fit.exp.x <- survreg(Surv(time, status) ~ 1, aml, dist = "exponential")
+summary(km.fit.x)
+
+s2<-survreg(Surv(time,status)~1 , data=aml, dist="exponential")
+summary(s2)
+selhat<-sqrt(summary(s2)$var)
+lhat<-exp(-s2$coefficients)
+licinf<-as.numeric( exp(-(s2$coefficients -1.959*selhat)))
+licsup<-as.numeric(exp(-(s2$coefficients + 1.959*selhat)))
+
+plot(km.fit.x, ylab=expression(hat(S)*"t"), xlab="temps")
+x <-seq(0,1200,1)
+lines(x , y=exp(-lhat*x), col="red" , lwd=2)
+lines(x , y=exp(-licsup*x), col="red",lty=2)
+lines(x , y=exp(-licinf*x), col="red",lty=2)
+
+```
+
+
+
+## 4) Interpréter les 3 représentations
+
+Les trois modèles semblent suivre la même tendance.
+
+
+# Exercice 3
+
+
+
+
