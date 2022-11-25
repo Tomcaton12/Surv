@@ -1,0 +1,279 @@
+---
+title: "Projet"
+author: "Will"
+date: "2022-11-24"
+output: html_document
+---
+
+- Package:
+```{r}
+pacman::p_load(knitr, tidyverse, survival, ggsurvfit, gtsummary, tidycmprsk, condsurv, ezfun, lubridate, sm, sjosmooth, survminer, GGally, readr, labelled, tidyverse, survey)
+```
+
+# Exercice 1
+
+La base de données alfa.csv contient des patients atteints de leucémie aigue myéloide qui, après une chimiothérapie d’induction, étaient en **rémission complète**.
+
+Ils ont alors été évalués pour la **présence de maladie résiduelle (MRD pour minimal residual disease)**. 
+
+La base de données comprend différentes dates qui correspondent à plusieurs événements possibles au cours du suivi : 
+- la date d’évaluation de la **rémission complète et de la mesure de la MRD (dateval)**,
+- la date de **rechute (datrec)**,
+- la date de **décès (datdc)**
+- la date de **dernières nouvelles (datdn)**,
+
+Différentes variables décrivant les patients:
+- âge
+- sexe
+- nb de cures de chimiothérapie nécessaires pour obtenir la rémission complète
+
+Vous vous **intéressez au rôle pronostique de la maladie résiduelle sur la *****survie sans rechute***
+
+1/ Décrivez les *caractéristiques de la population* ainsi que les *différents événements auxquels sont exposés les patients*
+
+2/ Analysez le *rôle pronostique de la maladie résiduelle* et de *l’âge sur la survie sans rechute*. Vous justifierez le choix du modèle utilisé et vérifierez ses hypothèses 
+
+3/ Comment pourriez-vous **représenter et tester l’hypothèse que le rôle pronostique de la MRD diffère selon le nombre de cures nécessaires pour obtenir une rémission complète ?** 
+
+
+```{r remedy001}
+alfa <- read_delim("C:/Users/33763/OneDrive/Bureau/SURVIE/alfa (2).csv", 
+    delim = ";", escape_double = FALSE, trim_ws = TRUE)
+str(alfa)
+look_for(alfa)
+freq.na(alfa)
+```
+```{r}
+head(alfa)
+
+```
+
+
+## 1/ *caractéristiques de la population* ainsi que les *différents événements auxquels sont exposés les patients*
+
+```{r}
+gtsummary::tbl_summary(alfa)
+summary(alfa)
+```
+
+
+```{r}
+alfa <- alfa |> 
+  mutate(
+    # intervalle_observation = interval(start = date_naissance, date_entretien), 
+    # calcul l'ecart entre deux dates, mais part défaut en seconde. Pas necessaire a créer et on peut
+    # le mettre direct dans duree d'observation
+    duree_rechute = interval(start = dateval, datrec) |> 
+      # time_length(duree_observation, unit = "month") # calcul la durée d'observation en jour/mois/année dans le cas avec intervalle obs
+      time_length(unit = "month"))
+
+alfa <- alfa |> 
+  mutate(
+    # intervalle_observation = interval(start = date_naissance, date_entretien), 
+    # calcul l'ecart entre deux dates, mais part défaut en seconde. Pas necessaire a créer et on peut
+    # le mettre direct dans duree d'observation
+
+    duree_deces = interval(start = dateval, datdc) |> 
+      # time_length(duree_observation, unit = "month") # calcul la durée d'observation en jour/mois/année dans le cas avec intervalle obs
+      time_length(unit = "month"))
+
+alfa <- alfa |> 
+  mutate(
+    # intervalle_observation = interval(start = date_naissance, date_entretien), 
+    # calcul l'ecart entre deux dates, mais part défaut en seconde. Pas necessaire a créer et on peut
+    # le mettre direct dans duree d'observation
+    duree_cens = interval(start = dateval, datdn) |> 
+      # time_length(duree_observation, unit = "month") # calcul la durée d'observation en jour/mois/année dans le cas avec intervalle obs
+      time_length(unit = "month"))
+```
+
+```{r}
+summary(alfa$duree_rechute)
+summary(alfa$duree_deces)
+summary(alfa$duree_fu)
+
+```
+Pas d'observation négative, rien a nettoyer.
+192 personnes sans rechute au totale (a préciser ensuite)
+197 personnes décédés au total ( a préciser ensuite)
+
+```{r}
+datrec <- alfa %>% 
+  filter(!is.na(datrec)) %>%  # nb de rechute
+  select(datrec)
+datdc <- alfa %>% 
+  filter(!is.na(datdc)) %>% # nb de décès
+  select(datdc)
+nbRe_tot <- datrec %>% 
+  count()
+nbDc_tot <- datdc %>% 
+  count()
+
+
+nbDc_rec <- sum(!is.na(alfa$datrec) & !is.na(alfa$datdc)) # nombre de décès avec rechute
+
+nbDc_Sanrec <- sum(is.na(alfa$datrec) & !is.na(alfa$datdc)) # nobre de décès sans rachute
+
+nb_censure <- sum(is.na(alfa$datrec) & is.na(alfa$datdc)) # nombre de aucun event/censure
+
+nbRe_tot
+nbDc_tot
+nbDc_rec
+nbDc_Sanrec
+nb_censure
+
+```
+
+
+## 2/ Analysez le rôle pronostique de la maladie résiduelle et de l’âge sur la survie sans rechute. Vous justifierez le choix du modèle utilisé et vérifierez ses hypothèses 
+
+```{r}
+# create one column called status
+alfa$status <- ifelse(!is.na(alfa$datrec) | !is.na(alfa$datdc), 1, 
+                             ifelse(is.na(alfa$datrec) & is.na(alfa$datdc), 0, 0))
+
+```
+
+1 = event c a d rechute ou mort
+0 = censure
+
+
+```{r}
+# create one column called time
+alfa <- alfa %>% 
+  mutate(time = case_when(!is.na(datrec) & !is.na(datdc) ~ duree_rechute, # cas de rechute et deces
+                           !is.na(datrec) & is.na(datdc) ~ duree_rechute, # cas de rechute et pas de deces
+                           is.na(datrec) & !is.na(datdc) ~ duree_deces, # cas de deces sans rechute
+                           is.na(datrec) & is.na(datdc) ~ duree_cens)) # cas de censure
+
+```
+
+```{r}
+head(alfa)
+```
+
+```{r}
+km.fit <- survfit(Surv(time, status) ~ MRD, data = alfa)
+
+# "event" plots cumulative events (f(y) = 1-y
+ggsurvplot(km.fit, fun = "event", risk.table = TRUE, surv.scale = "percent", pval = TRUE) 
+
+# "cumhaz" plots the cumulative hazard function (f(y) = -log(y))
+ggsurvplot(km.fit, fun = "cumhaz", risk.table = TRUE, pval = TRUE)
+
+# "pct" for survival probability in percentage
+ggsurvplot(km.fit, fun = "pct", risk.table = TRUE, pval = TRUE)
+
+```
+
+
+```{r}
+cox.MDR.age5 <- coxph(formula = Surv(I(time/365.25), status != 0) ~ MRD + I(age/5), data = alfa)
+
+summary(cox.MDR.age5) # IC95% ecrit
+tbl_regression(cox.MDR.age5, exponentiate = TRUE) |> add_global_p(keep = TRUE) |> # Keep pour garder les valeurs individuel
+  add_significance_stars(hide_p = FALSE)
+
+ggcoef_model(cox.MDR.age5, exponentiate = TRUE)
+```
+
+
+### Vérifiez l’hypothèse de log-linearitede l’âge
+
+
+```{r}
+
+coxph(Surv(time/365.25, status!=0)~I(age/5), data=alfa)
+agefit<-coxph(Surv(time/365.25,status!=0)~ pspline(age/5), data=alfa)
+agefit
+summary(agefit)
+termplot(agefit, term=1, se=TRUE, col.term=1, col.se=1)
+
+ggcoxdiagnostics(agefit)
+```
+
+
+### Vérifiez l’hypothèse de proportionnalité des risques
+
+
+```{r}
+fit.stage.pbc <-coxph(formula = Surv(I(time/365.25), status != 0) ~ MRD + I(age/5), data = alfa)
+summary(fit.stage.pbc)
+plot(survfit(Surv(I(time/365.25), status != 0) ~ MRD + I(age/5), data = alfa),fun="cloglog" , col=c(1,4))
+
+tbl_regression(fit.stage.pbc, exponentiate = TRUE) |> 
+  add_global_p(keep = TRUE) |> # Keep pour garder les valeurs individuel
+  add_significance_stars(hide_p = FALSE)
+
+ggcoef_model(fit.stage.pbc, exponentiate = TRUE)
+
+cox.zph.plot <- cox.zph(fit.stage.pbc)
+cox.zph.plot
+plot(cox.zph.plot)
+
+```
+
+
+
+## 3/ Comment pourriez-vous représenter et tester l’hypothèse que le rôle pronostique de la MRD diffère selon le nombre de cures nécessaires pour obtenir une rémission complète ? 
+
+
+```{r}
+# Il faut ajouter manuelle sinon a ignore pour l'interraction
+alfa$MRD_cure <- alfa$MRD * alfa$nbcures
+
+
+it.stage.pbc <-coxph(formula = Surv(I(time/365.25), status != 0) ~ MRD + nbcures + alfa$MRD_cure, data = alfa)
+summary(it.stage.pbc)
+# plot(survfit(Surv(I(time/365.25), status != 0) ~ MRD * nbcures, data = alfa),fun="cloglog" , col=c(1,4))
+
+tbl_regression(it.stage.pbc, exponentiate = TRUE) |> 
+  add_global_p(keep = TRUE) |> # Keep pour garder les valeurs individuel
+  add_significance_stars(hide_p = FALSE)
+
+ggcoef_model(it.stage.pbc, exponentiate = TRUE)
+
+cox.zph.plo <- cox.zph(it.stage.pbc)
+cox.zph.plo
+plot(cox.zph.plo)
+```
+
+```{r}
+km.fita <- survfit(Surv(I(time/365.25), status != 0) ~ MRD + nbcures, data = alfa)
+
+# "event" plots cumulative events (f(y) = 1-y
+ggsurvplot(km.fita, fun = "event", risk.table = TRUE, surv.scale = "percent", pval = TRUE) 
+
+# "cumhaz" plots the cumulative hazard function (f(y) = -log(y))
+ggsurvplot(km.fita, fun = "cumhaz", risk.table = TRUE, pval = TRUE)
+
+# "pct" for survival probability in percentage
+ggsurvplot(km.fita, fun = "pct", risk.table = TRUE, pval = TRUE)
+```
+
+```{r}
+ggforest(it.stage.pbc)
+```
+
+
+
+# Exercice 2
+
+La base de donnée kaposi_2021.txt décrit **144 patients** suivis pour un sarcome de Kaposi non lié au VIH.
+
+On s’intéresse au délai entre la **première consultation et le début d’un traitement par voie systémique** (décrit par le **délai en jours : deltrt** et **l’indicatrice de survenue de mise sous traitement à la fin du suivi : evtrt**) 
+
+1/ Décrivez le temps passé sans traitement systémique par les patients
+
+```{r}
+
+```
+
+
+2/ Le médecin de la consultation de dermatologie voudrait pouvoir communiquer à ses patients le temps moyen passé sans traitement. Quelle réponse pouvez-vous apporter ? 
+
+3/ Ce même médecin s’interroge sur le fait que le risque de devoir débuter un traitement soit constant ou non au cours du temps.
+
+3-1/ Proposez une solution qui permette d’évaluer visuellement cette hypothèse 
+
+3-2/ Proposez une solution qui permette de tester formellement cette hypothèse

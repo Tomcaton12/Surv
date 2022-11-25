@@ -1,0 +1,755 @@
+---
+title: "Cours SURVIE"
+author: "William Legendre"
+date: "2022-11-19"
+output: 
+  html_document: 
+    toc: yes
+    highlight: espresso
+    theme: readable
+    number_sections: yes
+---
+
+1/ **Identifier** la présence de **données censurées** en épidémiologie clinique et la nécessité d’analyses de type analyse de survie
+
+2/ Etre capable d’**estimer la survie de manière non paramétrique** det de **construire des courbes de survie et de comparer deux ou plusieurs courbes de survie par un test du log rank**
+
+3/ Savoir **planifier un essai** avec un **critère de jugement ** ***censuré (taille d’échantillon)***
+
+4/ Savoir **construire un modèle de régression à risques proportionnels de Cox**, ***univariable et multivariable, et vérifier ses hypothèses***
+
+5/ **Identifier** les situations d’***événements en compétitions*** et connaitre les **méthodes spécifiques adaptées**
+
+
+**POURQUOI UN INTÉRÊT AUX DONNÉES DE SURVIE ?**
+
+- Méthode spécifique
+- Etude de facteur **pronostiques** c a d survenu d'un event
+- ***Comparaison de traitements***  (essais randomisés)  avec comme critère une survenue d'un event quelconque : décès, sortie de réa, sortie d'hopital, J14, J28, J90 ...
+
+Implication sur la "survie" et les effets mesurées... Part attribuables à la prise en charge de la pathologie aigue/ chronique sous-jacente.
+
+#  Mortalité / Survie
+
+Ces % (vivants/décès) s'interprète comme des mesures de ***prévalences***.
+
+- Quantifie le problème dans une **population homogène**
+- C'est une **probabilité [0,1]**
+- La date/ l'instant de survenue de l'event ne nous intéresse pas.
+  - Une mesure de prévalence ne s'intéresse qu'à l'état **final** ou a un instant donné de la population (Marmite de la prévalence de Morton)
+- *Suppose* un **temps de suivi/d'obs identique pour tous** (la durée d'exposition n'intervient pas)
+  - Temps de suivie pour tous = **déterministe** (dates fixées à priori)
+  - Sortie de l'USI ou de l'hôpital = **aléatoire** (dates non fixes)
+  - Date calendaire ("date de point") = **aléatoire** (suivi différent entre sujets)
+  - **Penser au temps de début d'inclusion, fin d'inclusion .... fin d'étude.**
+  
+  
+  ![Plot title. ](Cours_SURVIE_insertimage_3.png)
+  
+
+
+#  Pour prise en compte des dates d'événements
+
+**Incidence** : mesure de la ***vitesse d'apparition des (nouveaux) cas*** dans une population (+++ maladie chronique [hématologie])
+
+- Epidémiologie : survenue de maladie chez sujets *sains*
+- Epidémiologie *clinique* : survenue d'un event chez des *malades*
+
+On s'intéresse l'**incidence cumulée**
+
+- **Proportion cumulée de sujet avec (ou sans) en fonction du temps**
+- Nécessite un suivi avec recueil de date d'event
+
+  
+# Particularité des données de survie [Définitions, Probabilités, Censure (indiqué par +)]
+
+1) Donnée (délai) de survie
+
+Exemple: **délai de survenue du décès** = délai entre 2 états différents : vivant -> décès
+
+2) Calcul à partir de dates
+
+On définit le délai de survie comme la différence entre 2 dates
+
+![Plot title. ](Cours_SURVIE_insertimage_4.png)
+
+3) Définition du terme : ***Données de survie*** (Survival time, failture time, time to event data)
+
+- Délai de survenue d'un event (*endpoint*) en ***tout ou rien***
+- Tout délai entre deux dates d'intéret
+- Tout délai de transition entre 2 états
+  - A l'instant initial, tous sont dans un *état 0* (naissance, inclusion, rémission, admission...)
+  - On s'intéresse à la transition vers l'*état 1* (maladie, décès, rechute, rechute et décès, sortie)
+    - Nécessite de définir précisement les dates étudiés
+    - ***Event d'intérêt est l'état final***
+    - ***Ne pas oublier l'état initial***
+  - La fenêtre d'observation des individus a son importance pour l'**inférence statistique**
+    - A l'origine des particularités des données de survie
+  
+## Loi des probabilité du délai de survie
+
+Soit **T** variable aléatoire modélisant un délai de survie
+
+**3 spécificités** :
+
+1) ***Positive***
+2) Distribution ***ASYMETRIQUE***
+3) Peut-être non observée ***CENSURE***
+
+- **Positive et Asymétrique**
+  - Délai entre 2 dates
+  - Mesuré le plus souvent en jours
+  - Souvent assimilable a une **variable continue**
+
+![Plot title. ](Cours_SURVIE_insertimage_5.png)
+
+  - **Conséquence**
+    - La moyenne est un "mauvais" paramètre pour décrire une distribution de survie
+    - **Préférer** la **médiane**
+    - La moyenne est "mauvaise" pour décrire un délai à cause de l'asymétrie
+    - Calcuée sur les seuls morts, elle est une représentation erronée de la survie de l'ensemble des malades étudiés
+    - Modèle statistique Gaussien non adapté ***sauf*** après transformation (exp, log(T))
+    - ***Familles paramétriques adaptées : Exponentielle, Weibull...***
+    
+## Loi de probabilité de T
+
+***Fonction de survie*** : **S(t)** est le *complément de la fonction de répartition cumulée.*
+
+- Elle décrit la probabilité de ne pas échouer ou de survivre jusqu'à un certain temps t.
+
+Egalement **décrite par l'une de ces 5 fonctions**: (diapo cours 1, a partir de 27), lien clair début diapo 2 dans les rappels)
+ 
+1) Densité de probabilité : **f(t)**
+- Si T est discrète fonction de masse.
+
+2) Fonction de répartition : **F(t)**
+- **Monotone croissante de 0 à 1**
+- C'est une primitive de f(x)
+
+3) Fonction de survie : **S(t)**
+- **Monotone décroissante de 0 à 1**
+- A + l'infini, toute la population a présenté l'event
+
+4) Fonction de **Risque instantannée** (**hazard** ou *intensity ou rate*) : h**(t) [𝝀(t)]**
+- Densité **conditionnelle** (a la survie en t)
+  - S'interprête comme la probabilité de déceder sur un petit intervalle de temps alors qu'on était vivant au début de l'intervalle (étude du vieillissement)
+  
+5) Fonction de **Risque cumulée** (*cumulative hazard*) : **H(t) [Λ(t)]**
+
+
+***S(t) + F(t) = 1***
+
+### Intérêt des fonctions de risques instantané et de risque cumulé
+
+  - Interprétation en termes de **probabilités conditionnelles**
+    - Exemple: T, délai de rechute après chirurgie
+    - Intérêt de **quantifier probabilité d'event si le malade n'a pas rechuté avant**
+    
+  - Interprétation de l'**effet du temps sur la survenue de l'event**
+    - Choix de modélisation paramétrique
+  - **Simplification analytique**
+    - Fonction de **risque cumulé**
+    
+  - Simplification de modélisation
+    - **Modèles de régression** pour la fonction de **risque instantané**
+    
+***Intérêt de l'étude de la fonction de risque (instantané) comme fonction du temps +++***
+- Si constant: pas de vieillissement (pex: forte mortalité)
+- Si croissante: vieillissement (pex: faible mortalité liée à la maladie)
+- Si décroissante: "*négative aging* (pex: surmortalité liée au traitement [chirurgie majeur...])
+
+- L'Esperance de T E(t) est l'*Aire sous S(t)*, c'est un mauvais paramètre de position
+
+Le **TwIST** = Time without Symptoms & Treatment toxicities : (espérance du) Temps de séjour sans symptomes ni toxicité. C'est une moyenne définie sur intervalle de temps tronqué (mean restricted life)
+
+![Plot title. ](Cours_SURVIE_insertimage_7.png)
+
+La **médiane** de la durée de survie est le temps t pour lequel la probabilité de surie **S(t) = 0.5** c a d la valeur tm qui satisfait S(tm) = 0.5. Dans le cas où l'estimateur est une ***fonction en escalier (pex : Kaplan-Meier)***, il se peut qu'il y ait un intervalle de temps vérifant S(tm) = 0.5. Il faut alors être prudent dans l'interprétation, notamment si les deux événements encadrant le temps médian sont éloignés
+
+
+### Familles paramétriques pour T
+
+Selon la forme attendu de **𝝀(t)**
+- Loi exponentielle
+- Loi de **Weibull**
+- Loi **logligistique**
+- Loi lognormale
+- ...
+
+***Intérêt de tracer log H(t)*** 
+
+- Intérêt de la loi **exponentielle**
+  - **Risque constant**
+    - Ignore le vieillissement ("ageless") : "sans mémoire"
+    - **Intérêt si l'event survient à risque constant**
+    
+- Intérêt du modèle de **Weibull** (λ, β [scale, shape])
+  - Défini par **λ(t) = λ * β * t^(β - 1)**
+  - β : pente. Si 
+    - β < 1 : risque décroissant
+    - β > 1 : risque croissant
+    - β = 1 : risue constant
+    
+    ![Plot title. ](Cours_SURVIE_insertimage_8.png)
+    ![Plot title. ](Cours_SURVIE_insertimage_9.png)
+    
+- Intérêt de la loi **log normale** : Log(T) ~N (μ, σ)
+  - Fonction de **risque non monotone** 
+    - **Augmente avec le temps jusqu'à un maximum, puis diminue**  (souvent après la médiane)
+    
+    
+## Incomplètement observée - Censure 
+
+**T** délai de survie d'intérêt
+**C** temps d'observation
+
+**Observation incomplètes** = non observation du délai d'event = observations **CENSUREES**
+
+La **censure** est un problème de **données manquantes** avec de l'information !
+
+### **CENSURE A DROITE** : ***C < T***
+
+***Non survenue de l'event*** en fin d'observation (pex: étude du délai de survie, tous les sujets ne sont pas décédés dans la cohorte en fin de suivi)
+
+L'event d'un individu i, n'est observé que sur un sous ensemble [O, Ci[
+Données observées:
+
+X = min(T,C)
+𝛿= 1(T<= C)
+
+![Plot title. ](Cours_SURVIE_insertimage_11.png)
+
+***3 types***:
+
+1) Type I: ***fixe***
+- Durée d'obs délai C de censure) prédéterminé pour tous : Ci = u
+  - Xi = min(Ti, u) et 𝛿= 1(Ti <= u)
+    - Etude expérimentale animale avec sacrifice des animaux a date fixe
+    - Etude clinique avec critère évalué à une même date (ex: mortalité à J28)
+    
+2) Type II: ***séquentielle***
+- Durée d'obs C de censure est interrompue après obs d'un nombre fixe **r** prédéterminé d'event
+  - Xi = min(Ti, T^r) et 𝛿= 1(Ti<= T^r)
+    - Etude de fiabilité de matériel
+    
+3) Type III: ***aléatoire***
+- Durée d'obs C de censure **aléatoire**
+  - Xi = min(Ti, Ci) et 𝛿= 1(Ti <= Ci)
+    - **Modélisation des données de cohorte**
+    - Suppose de plus que les variables de censure et de survie sont **indépendantes en probabilités.** Pour s'assurer d'une censure aléatoire indépendante: définir une*** ***date de point*** **de l'analyse des données**
+
+![Plot title. ](Cours_SURVIE_insertimage_12.png)
+
+- ***Censure ADMINISTRATIVE***
+  - Aléatoire ET indépendante
+  - Assuré par le choix d'une date de point("exclus-vivant")
+  
+  ![Plot title. ](Cours_SURVIE_insertimage_13.png)
+  
+  - ***Censure NON ADMINISTRATIVE***
+    - Aléatoire *mais* parfois liée au risque d'event du sujet
+    - Définie par l'**abscence de suivi du sujet à la date de point**
+    - On parle de **perdu de vue**
+    - Chercher causes d'interruption du suivi pour s'assurer de son **indépendance** +++
+
+
+#### ***PRINCIPE DE LA DATE DE POINT*** (pour la censure a droite)
+
+Evaluer l'état des sujets à une date (calendaire) fixe.
+On tronque les données après cette date.
+Objectif : s'assurer une **CENSURE INDEPENDANTE** dite ***ADMINISTRATIVE***
+
+
+### **CENSURE A GAUCHE** : ***T < C***
+
+Survenue de l'event ***AVANT*** avant l'observation (pex: étude de l'âge aux 1ère règles, on interroge une femme qui a "oublié" la date de ses 1ère règles).
+
+L'observation de l'event est limité a un sous-ensemble Ei de la forme (Vi, τ), Vi > 0
+
+Pex: délai de descente des babouins depuis un arbre. Au moment de l'observation, les babouins sont déjà descendu de l'arbre. 
+
+![Plot title. ](Cours_SURVIE_insertimage_14.png)
+####***ATTENTION DIFFERENCES ENTRE CENSURE ET TRONCATURE***
+
+***Censure*** *obs incomplète* d'une **population complète**
+
+***Troncature*** *objs complète* d'une **population incomplète**
+  - Souvent a Gauche "delayed entry"
+  - Pex: estimation d'un délai de survie post diagnostic à partir d'un échantillon initié au début du traitement.
+    - Pour être analysées, les sujets doivent avoir un temps de survie > temps de début de traitement. Donc les sujets décédés avant traitement sont exclus.
+
+### **CENSURE PAR INTERVALLE** : ***C1 < T < C2*** 
+
+Survenue de l'event entre 2 instants d'observation
+
+
+# ESTIMATION DE LA FONCTION DE SURVIE | Paramétrique et Non paramétrique
+
+**Estimation de S(t)**
+
+**But**: d'écrire la distribution des délais de survie
+Quantité d'intérêt est la fonction de survie
+**S(t) = P(délai de survie > t)**
+- Décrit la population de survivants en t, comme une fonction de t
+- pex, la proportion de sujets restés dans l'état 0, qui ne sont pas passés a l'état 1.
+
+## Estimateur non paramétrique de S(t)
+
+- En **absence de censure**
+  - Déduit de l'estimateur empirique de la fonction de réparition d'une variable aléatoire
+  - Fonction **monotone décroissante de 1 à 0**
+  - Allure "en marche d'escalier"
+
+![Plot title. ](Cours_SURVIE_insertimage_15.png)
+#### Kaplan Meier
+- En **présence de censure** (fixe ou aléatoire indépendante / non informative)
+  - Généralisation de l'estimateur empirique
+  - ***KAPLAN MEIER**
+    - Utiliser toute l'information des données
+    - Notamment les obs censurées: un sujet censuré a au moins survécu jusqu'à son temps de censure (Ti > Ci)
+    - **But** : Estimer la fonction de survie ("survival rate"), S(t) en présence de censure (ou non)
+    - **Principe** : Être en vie à 2 ans après inclusion c'est être en vie 1 an après l'inclusion et ne pas décéder entre 1 et 2 ans
+      - Généralisation pour 2 temps, t1 et t2, avec t2 > t1
+      - Il faut donc **estimer ces probabilités condtionnelles**
+      - Probabilité de faire l'event au temps yi, sachant qu'on ne l'a pas fait en yi-1 = nb d'event entre y-1 et yi parmi tous les sujets a risque au tempsp yi.
+      - Probabilité de survie conditonnelle = 1 - (di / ni) avec di : décès au temps i, et ni : patients en vie immédiatement avant le temps i.
+      - **Remarque** : si le temps yi correspond à une **censure** (δi = 0), il n'y a aucun event dans l'intervalle de yi-1 a yi donc cette probabilité vaut 1.
+      - La **probabilité S(t) ne change qu'aux temps d'event (δi = 1)**
+      - Défini sur tout l'intervalle des obs (et non en dehors)
+      - Fonction monotone décroissante **de 1 à 0** en **marches d'escalier**
+      - Permet l'estimation **non biaisée de la médiane (et de tout autre quantile)**
+      - Suppose que tous les sujets de la population sont exposés à **UN SEUL RISQUE** (présenter la transmission vers l'état 1), avec assez de temps on pourrait observer tout les temps de transition (pour décès).
+      - Prends en compte même les individus vivants (restés dans l'état 0) en fin d'obs, ie, les censures supposées NON informatives (de la probabilité de transition)
+
+![Plot title. ](Cours_SURVIE_insertimage_16.png)
+
+![Plot title. ](Cours_SURVIE_insertimage_17.png)
+
+
+![Plot title. ](Cours_SURVIE_insertimage_18.png)
+
+A préciser: pour la mesure de précision, indiquer le nb de sujets exposés au cours du temps.
+
+**Précision : intervalle de confiande de S(t)**
+- Estimation de l'écart-type de S(t) : méthode de Greewood : estime la probabilité qu'un individu survive sur l'intervalle débutant par t(j)
+- Suppose une loi binomiale du nb de décès sur l'intervalle débutant par tj
+- Intervalle de confiance (1 - α) pour S(t) (cours 2 dapo 51)
+
+
+
+
+
+
+
+
+### Estimateur paramétrique
+
+On choisit une famille de lois pour décrire la variable des **temps de survie T**
+
+L'estimation devient celle d'un **paramètre inconnu**
+
+- **Estimateur du maximum de vraisemblance**
+  - En **absence de censure**
+    - Echantillon des obs (T1, T2, ...Tn) **indépendante** et **équidistribué**
+    - Modèle statistique dans une famille paramétrique ou f𝜽(t) est la densité de probabilité T.
+      - L(𝜽) est la vraisemblance des données
+      - On chercher 𝜽 pour **maximiser L(𝜽)** 
+      - En général on travail sur log(L(𝜽)) c'est plus simple, et on veut **minimiser** log(L(𝜽)) en trouvant le point = a 0 en le dérivant.
+
+**Estimation paramétrique en présence de CENSURE FIXE**
+
+- Echantillon d'obs indépendant
+- Densité de probabilité de T
+- La contribution des sujets a la vraisemblance dépend seulement de leur état.
+
+- Lorsqu'il y a densité de probalité T et C, alors la vraisemblence des données est modifiées car la censure est aléatoire, et donc la contribution des sujets a la vraisemblance dépend de leur état et de la censure.
+
+
+
+**Estimation paramétrique en présence de CENSURE ALEATOIRE**
+
+- Sous conditions sur le mécanisme de censure
+  - Concept probabiliste ce **censure indépendante** on associe le concept statistique de **censure non informative**
+  - Les données de censure apporte de l'information sur 𝜸mais n'apporte aucune information sur 𝜽.
+  - On parle de *vraisemblance partielle*
+
+***Vraisemblance partielle***
+- Sous hypothèse de censure aléatoire et indépendante (non informative), inférence basée sur la vraisemblance partielle des observations
+
+Exemple: modèle exponentiel, modèle de Weibull (équation non linéaires : procédures numériques itératives - algo de Newton Raphson)
+
+
+
+
+**Risque instantané** 
+- h(t) aux temps entre t(j) et t(j+1) : h(t) = dj /𝑛j𝜏j
+  - dj : nb de décès au j-ième temps de décès
+  - 𝑛j : nb de patients à risque au temps t(j)
+  - 𝜏j : t(j+1) - t(j) délai entre deux décès
+  - Difficile à estimer
+
+**Risque cumulé**
+- Estimateur de Nelson - Aalen
+- Autre estimateur : Fleming - Harrington
+- Plus simple mais interprêtation difficile : nombre d'event attendus pour chaque individu au temps t si l'event était un processus reproductible.
+
+
+![Plot title. ](Cours_SURVIE_insertimage_19.png)
+
+
+
+## Comparaison de 2 fonctions de survie
+
+**Expliquer la mortalité: Comparaison**
+
+*Entre morts et vivants*
+
+***Test du log-rank***
+- **But** : tester l'**égalité des 2 distributions de survie** (et **non** de 2 taux de survie à un temps donné)
+- Test "**non paramétrique**" : ***AUCUNE HYPOTHESE A VERIFIER**
+  - **Sauf CENSURE NON INFORMATIVE**
+-Puissance maximale si les risques de décès des 2 groupes sont **proportionnels** au cours du temps
+  - **Attention** si les courbes se croisent !
+
+**Cas de 2 populations indépendantes**
+
+Comparaison de 2 fonctions de survie: 
+H0 : S1(t) = S2(t) ; H1 : S1(t) != S2(t)
+**En absence de censure** : tests non paramétriques (Wilcoxon / Mann Whitney)
+**En presence de censure**: extension des tests non paramétriques :
+- Test du **log-rank** (cours 2, diapo 62...)
+  - Généralise le test du chi2 stratifié de Mantel et Haenszel
+  - Synonyme du test de Mantel-Cox
+  - Basé sur des tableaux de contigence 2x2 à chaque temps de décès, t(1) < t(2) ... t(k)
+  - Statistique de Chi2 permet la comparaison des nombres de décus obs ET attendus E(D1) sous H0
+  - La puissance de ce test dépend du nombre d'event plus que du nb de sujets
+    - Puisance max dans la famille alternative de Lehman c a d quand les risques sont **proportionnel** sinon c'est valide mais moins puissant (pex, quand les courbes se croisent)
+    - Existe aussi des **log-rank pondéré, stratifié, et comparaison de K groupes**
+      - **Pondération** (cours 2 diapo 67, a voir si nécessaire), le log-rank est le plus puissant dans la famille des hypothèses alternatives avec proportionnalité des risques
+      - **Stratifié** (cours 2 diapo 68, a voir si nécessaire), calcul sur chaque strate, séparement sur chaque strate puis somme les différences sur l'ensemble des strates. **Limite = perte de puissances si bcp de strates**
+      - **Pour K groupes** suit un Chi2 a G-1 ddl. *Erreur fréquente* : comparer des groupes définis dans le futur.
+        - Que faire sinon ? Biais du délai de réponse (guarantee time bias) / Interprétation non causale : facteur de **confusion** : alternative est de corriger le biais de l'estimater des fonctions de survie en changeant l'origine des temps / Méthode de la borne (landmark Method) : origine = date tau (intérêt lorsque délai de réponse au traitement est court (pex: cancer colorectaux) / **Alternative** : introduction d'un état dépendant du temps dans un modèle de régression
+- Test de Wilcoxon
+- Test de Gehan
+
+**Expliquer la mortalité : Conclusion
+- Limites:
+  - Comparaison multiples
+  - Non prise en compte d'eventuels facteurs de confusion
+  
+- **Intérêt des modèles de regression**
+  - Permet de **décrire la distribution d'une variable aléatoire** en fonction de **paramètres supposés non aléatoires**  
+  
+# Modèle de COX
+
+Introduit la **vraisemblance partielle a.k.a maximum partial likelihood**
+
+## Différence entre modèle de COX et Logistique
+
+- **Taux d'incidence (risque)** : nb de nvx cas de maladie dans la population à risque par unité de temps (ou taux de mortalité si le résultat est la mort)
+- **Incidence cumulée** : proportion de nvx cas survenus au cours d'une période donnée
+- Modèle de **Cox estime des HR** : rapport des taux d'incidence
+- Modèle **logistique estime des OR** : rapport de cotes
+
+**Cox modélise l'effet des covariables sur le taux de risque mais laisse le taux de risque de base non spécifié**
+- Ne suppose **PAS** la connaissance du risque absolu
+- Estime le risque **relatif** plutôt qu'absolu
+- Semiparamétrique
+- Peut prendre en charge des mesures **discrètes et continues** du temps d'**event**
+- Facilité d'incorporation de covariables **dépendantes** du temps
+
+## Hypothèses, Expression, Estimation, Prédiction
+
+- Modélise la fonction de risque instantané, densité conditionnelle.
+
+- Modèle SemiParamétrique:
+  - 1 partie non paramétrique
+    - **fonction de risque de base h0(t) NON spécifiée**
+      - Positive (traduit le risque quand toutes les covar sont nulles)
+  - 1 partie paramétrique
+    - Influence des covar Zn sur le risque de base, modélisé par la fonction (log)linéaire. Z : vecteur des prdicteurs: variables continues, discrètes ou termes d'interaction.
+
+**Risques proportionnels** : rapport des fonctions de risques de 2 indivs ne dépendent **pas du temps**.
+- ***Constante*** **HR (hazard ratio)** : rapport des fonctions de risque instantannées. Les 2 fonctions de risque sont **parallèles**. Effet des prédicteurs constant dans le temps.
+
+**Interprétation de 𝛽** cours 3. diapo 12...)
+
+**COX est linéaire pour le log HR**
+
+HR = log(𝛽)
+
+![Plot title. ](Cours_SURVIE_insertimage_20.png)
+![Plot title. ](Cours_SURVIE_insertimage_21.png)
+
+
+
+**Lorsque temps d'event identiques "ties"**
+- Plusieurs méthode, 1 seul event a chaque temps:
+  - Méthode discrète (COX)
+    - Suppose que le temps = var discrète
+      - Difficile si nombreux "ties"
+  - Méthode exacte (Prentice)
+    - Les "ties" surviennent a cause de l'imprécision des mesures
+    - Il y a donc un ordre inconnu des temps d'event
+    - Calcul la proba de tous les ordres possibles pour les "ties"
+    - Pas a privilégier car temps de calcul lourd
+  - Approximation de Breslow
+    - Réduit temps de calcul de la méthode exact.
+    - Mauvaise approx. quand bcp de "ties" par rapport au nb de sujets à risues
+  - **Approximation d'Efron**
+    - A préférer quand bcp de "ties" par rapport au nb de sujet a risk.
+    - **Méthode utilisée par `coxph()`**
+  
+## Modèle STRATIFIE
+
+Permet de considérer des fonctions de risque de base différentes pour chacune des k strates
+
+- On stratifie sur une variable catégorielle à **K classes**
+- Les strates **répartissent les patients dans des groupes disjoints**
+- Le taux de base est différent dans chaque strate mais **l’effet des autres covariables est identique**
+
+#### Avantages
+
+- Permet un **ajustement naturel sur un facteur de confusion**
+- Ne repose **pas sur l’hypothèse de proportionnalité** puisque 1 modèle par strate : **on peut stratifier sur un facteur dont effet dépend du temps**
+
+#### Inconvénients
+- **Pas d’estimation directe de l’effet de la strate**
+- **Précision** de l’estimation des coefficients et puissance de l’analyse **diminuent avec le nombre de strates**
+
+
+## COX
+## Vérifier les hypothèses (Risque proportionnels, log linéarité, censure non informative)
+
+
+1) Risques proportionnels
+- Si ça n’est pas vrai :
+  - on estime un effet moyen
+  - On peut conclure à tort à l’absence d’effet
+Si on trace log(−log(𝑆(t)) pour chaque valeur de Z toutes les courbes doivent être parallèles (translatées verticalement)
+
+![Plot title. ](Cours_SURVIE_insertimage_22.png)
+
+Limites
+- Approche graphique sujette à interprétation subjective, parfois difficile
+- Ne s’applique pas à des prédicteurs continus
+
+**Méthodes explicites**
+Idée = modélisation explicite d’une **dépendance au temps en introduisant un effet dépendant du temps**
+
+**RÉSIDUS DE SCHOENFELD**
+- test de Grambsch& Therneau
+**utilise les résidus de Schoenfeld**,
+trace les résidus selon une fonction du temps𝑔(𝑡)
+**si pente non nulle : alors violation de PH**
+
+![Plot title. ](Cours_SURVIE_insertimage_23.png)
+
+2) Relation log linéaire entre prédicteurs (non binaires) et risque
+
+Si on modélise à tort un effet linéaire d’une variable continue
+- Estimation biaisée
+- Possible conclusion à tort à l’absence d’effet
+**Résidus de Martingale**
+- Pour un individu i : Différence entre l’observation de l’événement 𝛿𝑖à ce qui est attendu conditionnellement au modèle testé, évalué par le taux cumulé dans la population.
+- **Permettent d’étudier la relation fonctionnelle entre une variable et le risque instantané**
+- Si z a un effet de la forme f(z) alors ses résidus sont approximativement proportionnels à f(z)
+
+![Plot title. ](Cours_SURVIE_insertimage_24.png)
+
+
+3) Censure indépendante (non informative)
+
+- Formellement non testable (on n’observe pas T et C ensemble)
+- Liée au schéma de l’étude et au contexte +++
+
+# Performances = ?
+
+## Calibration
+
+**Calibration** 
+Est-ce que près de x patients sur 100, avec une prédiction de risque de x %, ont le résultat ?
+- Capacité à **prédire** précisément le **risque absolu** de l’événement
+- Propriété de type **"Goodness Of Fit [GOF]"**
+- Expected vs Observed : par décile de risque **prédit**
+  - Observed : non disponible pour censures
+    - Estimé par **KM maginal**
+      - Test de Nam & d'Agostino
+      - Puissance faible pour petit effectif, et trop puissant pour grand effectif
+      - L'intérêt est dans la courbe de **RE**calibration
+![Plot title. ](Cours_SURVIE_insertimage_25.png)
+
+
+## Discrimination
+
+**Discrimination**
+Les patients avec le résultat ont-ils des prédictions de risque plus élevées que ceux sans ?
+- Capacité à **ordonner correctement** les patients en **fonction de leur risque d’événement**
+- Sensibilité, Spécificité, courbe ROC, AUC
+- **Discrimination > calibration**
+  - On peut recalibrer un modèle
+  - Indépendant de la calibration car statistique sur les rangs
+  - Souvent pour les tests diagnostic
+
+**Courbe ROC**
+- Chaque seuil : TPR vs FPR (true positive rate vs false positive rate)
+- AUC : entre 0 et 1; mais intéressant entre 0.5 et 1
+- Interprétation : probabilité d'ordonner correctement une paire malade, non malade
+- AUC = 1 = discrimination parfaite, AUC = 0.5 = tirage au sort
+
+### Lien avec les modèles de regression
+
+Regression logistique
+AUC = c-index
+**Concordance entre prédictions du modèle et observations**
+- Capaciter de discrimination: **à quel point les malades ont des probas prédite de maladie plus élevés que les non malades.**
+
+**Problème** **#1 : comment définir les “malades”**
+- Temps d’événement : Choix d’un temps t de mesure : AUC(t)
+- Plusieurs définitions des cas et des contrôles
+
+AUC(T)
+- CAS
+  - Incidents : évènement au temps t
+  - **Cumulatifs : évènement avant t**
+- CONTROLES
+  - Statiques : pas d’événement sur un large suivi t*
+  - **Dynamiques : pas d’événement au temps t**
+
+![Plot title. ](Cours_SURVIE_insertimage_26.png)
+
+
+**Problème #2 : comment gérer la censure ?**
+Xi = min(Ti,Ci)
+Plusieurs estimateursont été proposés
+Heagerty, Lumley & Pepe(2000)
+Uno & Wei (2011)...
+
+**LIMITES**
+Variabilité au coursdu temps
+Ne capture qu’unepartie de l’information
+AUC a un jour prcis : does not assess discrimination between patients
+
+
+**Solution: AUC GLOBALE** : inclu dans `coxph` 
+C-statistic :
+- prends en compte partiellement la censure (paires non informative, Ci, Ti) des sujets. Biais> 0 qui augmente avec la censure.
+Paires informatives (Ti, Tj) avec Ti< Tj
+Paires concordantes (Ti<Tj) & (Xi>Xj)
+
+# Estimation en présence de compétition (risques compétitifs ou Censure informative)
+
+Censure: a droie aléatoire, la durée d'obs Ci de censoure est aléatoire. Suppose de plus que les variables de censure et de survie sont indépendantes en probabilités = censure non informative
+Modélisation avec COX a risques proportionnels: exp(Beta) = HR = cte
+  - Risk set : ensemble de patient avec T > ti
+Modélise la fonction de risque instantanné alpha(t)
+Modèle semiParamétrique
+
+RELATION HAZARD <-> FONCTION DE SURVIE
+Relation 1:1
+1 - S(t) = F(t)
+Direction de l’effet d’une covariable sur le risque instantané <-> direction de l’effet de la covariable sur la fonction de survie
+- Direction identique mais pas valeur numérique
+
+![Plot title. ](Cours_SURVIE_insertimage_27.png)
+
+## Risque compétitif
+
+### Méthode de KM
+**Pour être valide, on doit supposer que les censures sont «non informatives» de la mortalité**
+
+
+#### Comment mesurer une incidence cumulée en présence de «censure informative» ?
+
+![Plot title. ](Cours_SURVIE_insertimage_28.png)
+![Plot title. ](Cours_SURVIE_insertimage_29.png)
+
+![Plot title. ](Cours_SURVIE_insertimage_30.png)
+
+![Plot title. ](Cours_SURVIE_insertimage_31.png)
+
+![Plot title. ](Cours_SURVIE_insertimage_32.png)
+
+![Plot title. ](Cours_SURVIE_insertimage_33.png)
+
+![Plot title. ](Cours_SURVIE_insertimage_34.png)
+
+![Plot title. ](Cours_SURVIE_insertimage_35.png)
+
+![Plot title. ](Cours_SURVIE_insertimage_36.png)
+
+#### Biais de l’estimation classique en présence de compétition
+
+![Plot title. ](Cours_SURVIE_insertimage_37.png)
+
+![Plot title. ](Cours_SURVIE_insertimage_38.png)
+
+![Plot title. ](Cours_SURVIE_insertimage_39.png)
+
+#### Censure «informative» et risques compétitifs
+**Question à se poser quand on censure**
+- Décès avant rechute (Relapse-free interval)
+  - Allogreffe dans le suivi
+  - Arrêts de traitements protocolaires
+  - Tout événement au cours du suivi qui peut conduire à un risque d’événement modifié
+
+
+#### Comparaison en présence de compétition
+**Comparaison de 2 groupes : log-rank invalide**
+**Comparaison des fonctions d’incidence cumulée**
+**Statistique de Gray** 
+
+#### Modèles de régression en présence de compétition
+
+Les 2 modèles les plus utilisés sont :
+**Modèle de Cox cause-specifique**
+  - Modélise le **risque instantané cause-spécifique**
+  
+  ![Plot title. ](Cours_SURVIE_insertimage_40.png)
+  
+  ![Plot title. ](Cours_SURVIE_insertimage_41.png)
+  
+  ![Plot title. ](Cours_SURVIE_insertimage_42.png)
+  
+  ![Plot title. ](Cours_SURVIE_insertimage_43.png)
+  
+**Modèle de Fine & Gray**
+  - Modélise le risque de sous-répartition
+
+![Plot title. ](Cours_SURVIE_insertimage_44.png)
+
+![Plot title. ](Cours_SURVIE_insertimage_45.png)
+
+![Plot title. ](Cours_SURVIE_insertimage_46.png)
+
+![Plot title. ](Cours_SURVIE_insertimage_47.png)
+
+![Plot title. ](Cours_SURVIE_insertimage_48.png)
+
+![Plot title. ](Cours_SURVIE_insertimage_49.png)
+
+#### Que choisir ?
+
+**Fine & Gray**
+Intérêt évident du modèle : lien direct entre SHR et effet sur la survenue (i.e. l’incidence cumulée) de l’événement
+
+Mais avec des limites :
+- L’effet d’une covariable sur l’incidence cumulée a la même direction mais pas la même valeur numérique que l’effet sur le SH
+- On peut comparer les effets de 2 variables sur l’incidence cumulée du même événement via leur SHR respectifs
+- On ne peut pas comparer les effets d’une variable sur les incidences cumulées de deux événements en compétition via leurs SHR respectifs
+- On ne peut pas comparer les effets d’une variable sur les incidences cumulées d’un même événement dans 2 études différentes via leurs SHR respectifs
+
+- L’aspect «artificiel» du riskset n’empêche pas la validité du modèle
+- La quantité modélisée est le taux de survenue de l’événement d’intérêt chez les patients qui n’ont pas fait d’événement + ceux qui ont fait l’événement en compétition (parfois difficile à expliquer)
+- Intérêt pour une **modélisation pronostique/prédictive d’un événement, et/ou des problématiques d’allocation de ressources**
+
+
+**Modèle Cause-specific**
+Limite évidente :
+- pas de lien direct entre csHRket effet sur la probabilité (Incidence cumulée) de l’événement k
+
+- Même s’il est possible de reconstruire les incidences cumulées à partir de tous les csHR(et tous les risques de base)
+- La quantité modélisée a plus de sens : taux de survenue de l’événement d’intérêt chez les patients qui n’ont encore fait aucun événement
+Intérêt pour une **modélisation à but étiologique**
+
+When analyzing survival data in which **competing risks are present**, rather than beginning with a predetermined type of regression model, the investigator and analyst should **begin by carefully formulating the research question and then selecting the model** that is most appropriate for addressing the formulated question. In many instances, particularly in **epidemiological research, the most appropriate model will be the cause‐specific hazard model**. However, in **settings in which it is important to make inferences about the effect of covariates on the incidence of the outcome, then the Fine‐Gray model will be the most appropriate model**. Some authors have suggested that to develop a **greater understanding of the relationship between covariates and outcomes, that both cause‐specific and subdistributionhazard models be fit, for both the primary outcome and for the competing events**.When doing so, the principal message of the current study is that the regression coefficients from the subdistributionhazard model must be interpreted correctly
