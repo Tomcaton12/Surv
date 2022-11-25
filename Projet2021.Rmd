@@ -60,30 +60,17 @@ summary(alfa)
 ```{r}
 alfa <- alfa |> 
   mutate(
-    # intervalle_observation = interval(start = date_naissance, date_entretien), 
-    # calcul l'ecart entre deux dates, mais part défaut en seconde. Pas necessaire a créer et on peut
-    # le mettre direct dans duree d'observation
     duree_rechute = interval(start = dateval, datrec) |> 
-      # time_length(duree_observation, unit = "month") # calcul la durée d'observation en jour/mois/année dans le cas avec intervalle obs
       time_length(unit = "month"))
 
 alfa <- alfa |> 
   mutate(
-    # intervalle_observation = interval(start = date_naissance, date_entretien), 
-    # calcul l'ecart entre deux dates, mais part défaut en seconde. Pas necessaire a créer et on peut
-    # le mettre direct dans duree d'observation
-
     duree_deces = interval(start = dateval, datdc) |> 
-      # time_length(duree_observation, unit = "month") # calcul la durée d'observation en jour/mois/année dans le cas avec intervalle obs
       time_length(unit = "month"))
 
 alfa <- alfa |> 
   mutate(
-    # intervalle_observation = interval(start = date_naissance, date_entretien), 
-    # calcul l'ecart entre deux dates, mais part défaut en seconde. Pas necessaire a créer et on peut
-    # le mettre direct dans duree d'observation
     duree_cens = interval(start = dateval, datdn) |> 
-      # time_length(duree_observation, unit = "month") # calcul la durée d'observation en jour/mois/année dans le cas avec intervalle obs
       time_length(unit = "month"))
 ```
 
