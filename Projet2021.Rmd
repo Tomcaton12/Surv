@@ -263,17 +263,132 @@ La base de donnée kaposi_2021.txt décrit **144 patients** suivis pour un sarco
 
 On s’intéresse au délai entre la **première consultation et le début d’un traitement par voie systémique** (décrit par le **délai en jours : deltrt** et **l’indicatrice de survenue de mise sous traitement à la fin du suivi : evtrt**) 
 
-1/ Décrivez le temps passé sans traitement systémique par les patients
+```{r}
+kaposi <- read_csv("C:/Users/33763/OneDrive/Bureau/SURVIE/kaposi_2021.csv")
+View(kaposi)
+
+tbl_summary(kaposi)
+
+```
+
 
 ```{r}
+kaposi <- kaposi %>% 
+  rename(time = deltrt, status = evtrt)
+  
+```
+
+
+1/ Décrivez le temps passé sans traitement systémique par les patients
+
+
+
+
+```{r}
+
+
+km.fit.ovarian.plot <- survfit(Surv(I(time/30.25), status) ~ 1, data = kaposi)
+
+# "event" plots cumulative events (f(y) = 1-y
+ggsurvplot(km.fita, fun = "event", risk.table = TRUE, surv.scale = "percent", pval = TRUE, conf.int = TRUE) 
+
+# "cumhaz" plots the cumulative hazard function (f(y) = -log(y))
+ggsurvplot(km.fita, fun = "cumhaz", risk.table = TRUE, pval = TRUE)
+
+# "pct" for survival probability in percentage
+ggsurvplot(km.fita, fun = "pct", risk.table = TRUE, pval = TRUE, conf.int = TRUE)
+
 
 ```
 
 
 2/ Le médecin de la consultation de dermatologie voudrait pouvoir communiquer à ses patients le temps moyen passé sans traitement. Quelle réponse pouvez-vous apporter ? 
 
+```{r}
+kaposi %>% 
+  filter(status == 0) %>% 
+  summarize(median_surv = mean(time))
+
+```
+
+```{r}
+mean_time <- kaposi %>% 
+  filter(status == 0) %>% 
+  summarise(mean_time = mean(time/365))
+mean_time
+```
+
+
+```{r}
+kaposi$datey <- as.numeric(kaposi$time/365.25)
+```
+
+
+
+```{r}
+
+
+
+
+```{r}
+kaposi %>% 
+  filter(status == 0 & datey <= 10) %>% 
+  group_by(status) %>% 
+  summarise(mean(datey, na.rm = TRUE))
+```
+
+
 3/ Ce même médecin s’interroge sur le fait que le risque de devoir débuter un traitement soit constant ou non au cours du temps.
+
 
 3-1/ Proposez une solution qui permette d’évaluer visuellement cette hypothèse 
 
+
+```{r}
+
+
+weibull <- survreg(formula = Surv(time, status) ~ 1, data = kaposi, dist= "weibull")
+summary(weibull)
+```
+```{r}
+s2<-survreg(Surv(I(time/30.5),status)~1 , data=kaposi, dist="exponential")
+summary(s2)
+selhat<-sqrt(summary(s2)$var)
+lhat<-exp(-s2$coefficients)
+licinf<-as.numeric( exp(-(s2$coefficients -1.959*selhat)))
+licsup<-as.numeric(exp(-(s2$coefficients + 1.959*selhat)))
+
+plot(km.fit.ovarian.plot, ylab=expression(hat(S)*"t"), xlab="temps")
+x <-seq(0,1200,1)
+lines(x , y=exp(-lhat*x), col="red" , lwd=2)
+lines(x , y=exp(-licsup*x), col="red",lty=2)
+lines(x , y=exp(-licinf*x), col="red",lty=2)
+```
+
+
+
 3-2/ Proposez une solution qui permette de tester formellement cette hypothèse
+
+```{r}
+fit.weibull.ovarian <- survreg(formula = Surv(I(time/30.5), status) ~ 1, data = kaposi, dist= "weibull")
+summary(fit.weibull.ovarian)
+
+s3 <- survreg(Surv(I(time/30.5), status)~1, data = kaposi, dist = "weibull")
+summary(s3)
+
+y <-rweibull(1000, shape=2, scale=5)
+plot(km.fit.ovarian.plot, ylab=expression(hat(S)*"t"), xlab="temps")
+lines(y=seq(0.01,0.99,0.01),x=predict(s3,newdata=data.frame(x=1),type='quantile', p=1-seq(0.01,0.99,0.01)), type="l",col=4,lwd=2)
+```
+
+```{r}
+plot(km.fit.ovarian.plot, ylab=expression(hat(S)*"t"), xlab="temps")
+x <- seq(0,1200,1)
+lines(x , y=exp(-lhat*x), col="red" , lwd=2)
+lines (y=seq(0.01,0.99,0.01),
+       x=predict(s3,newdata=data.frame(x=1),
+                 type='quantile', p=1- 
+                   seq(0.01,0.99,0.01)),
+       type="l",col=4,lwd=2)
+```
+
