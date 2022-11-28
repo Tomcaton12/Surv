@@ -1,6 +1,5 @@
 ---
 title: "Examen"
-author: "William LEGENDRE"
 date: "2022-11-25"
 output: word_document
 ---
